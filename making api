@@ -1,0 +1,124 @@
+pip install Flask
+pip install pymongo
+
+lua
+/api_project
+|-- app.py
+|-- config.py
+|-- requirements.txt
+config.py:
+
+python
+Copy code
+from pymongo import MongoClient
+
+def get_db():
+    client = MongoClient('mongodb+srv://db_user_read:LdmrVA5EDEv4z3Wr@cluster0.n10ox.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
+    db = client.RQ_Analytics
+    return db
+
+reate the Flask App and Define the Endpoints
+app.py:
+
+python
+Copy code
+from flask import Flask, jsonify
+from config import get_db
+from datetime import datetime
+from bson.son import SON
+from pymongo import ASCENDING
+
+app = Flask(__name__)
+db = get_db()
+
+# 1. Total Sales Over Time
+@app.route('/sales_over_time/<interval>', methods=['GET'])
+def sales_over_time(interval):
+    group_by = {
+        'daily': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$created_at'}},
+        'monthly': {'$dateToString': {'format': '%Y-%m', 'date': '$created_at'}},
+        'quarterly': {'$concat': [{'$substr': [{'$year': '$created_at'}, 0, 4]}, '-Q', {'$toString': {'$ceil': {'$divide': [{'$month': '$created_at'}, 3]}}}]},
+        'yearly': {'$dateToString': {'format': '%Y', 'date': '$created_at'}}
+    }
+
+    pipeline = [
+        {
+            '$group': {
+                '_id': group_by[interval],
+                'total_sales': {'$sum': '$total_price_set.shop_money.amount'}
+            }
+        },
+        {'$sort': SON([('_id', ASCENDING)])}
+    ]
+
+    sales_data = list(db.shopifyOrders.aggregate(pipeline))
+    return jsonify(sales_data)
+
+# 2. Sales Growth Rate Over Time
+@app.route('/sales_growth_rate/<interval>', methods=['GET'])
+def sales_growth_rate(interval):
+    # Code similar to sales_over_time, but calculating growth rate
+    pass
+
+# 3. New Customers Added Over Time
+@app.route('/new_customers_over_time/<interval>', methods=['GET'])
+def new_customers_over_time(interval):
+    group_by = {
+        'daily': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$created_at'}},
+        'monthly': {'$dateToString': {'format': '%Y-%m', 'date': '$created_at'}},
+        'quarterly': {'$concat': [{'$substr': [{'$year': '$created_at'}, 0, 4]}, '-Q', {'$toString': {'$ceil': {'$divide': [{'$month': '$created_at'}, 3]}}}]},
+        'yearly': {'$dateToString': {'format': '%Y', 'date': '$created_at'}}
+    }
+
+    pipeline = [
+        {
+            '$group': {
+                '_id': group_by[interval],
+                'new_customers': {'$sum': 1}
+            }
+        },
+        {'$sort': SON([('_id', ASCENDING)])}
+    ]
+
+    customers_data = list(db.shopifyCustomers.aggregate(pipeline))
+    return jsonify(customers_data)
+
+# 4. Number of Repeat Customers
+@app.route('/repeat_customers/<interval>', methods=['GET'])
+def repeat_customers(interval):
+    # Similar logic as new_customers_over_time but focusing on repeat customers
+    pass
+
+# 5. Geographical Distribution of Customers
+@app.route('/geographical_distribution', methods=['GET'])
+def geographical_distribution():
+    pipeline = [
+        {
+            '$group': {
+                '_id': '$default_address.city',
+                'customer_count': {'$sum': 1}
+            }
+        },
+        {'$sort': SON([('customer_count', ASCENDING)])}
+    ]
+
+    geo_data = list(db.shopifyCustomers.aggregate(pipeline))
+    return jsonify(geo_data)
+
+#6  Customer Lifetime Value by Cohorts
+@app.route('/customer_lifetime_value', methods=['GET'])
+def customer_lifetime_value():
+    # Group customers by the month of their first purchase and calculate LTV
+    pass
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+bash
+
+python app.py
+bash
+
+GET http://127.0.0.1:5000/sales_over_time/monthly
+
+GET http://127.0.0.1:5000/new_customers_over_time/yearly
